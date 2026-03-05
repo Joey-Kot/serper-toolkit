@@ -647,6 +647,17 @@ async def serper_aggregated_search(
     search_language: Optional[str] = None,
     search_time: Optional[str] = None,
 ) -> str:
+    """
+    Aggregated Search Interface
+    Parameters:
+        query: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+        search_time: Time Filter, Such As "hour", "day", "week", "month", "year" (Optional)
+    Returns:
+        Json Format String
+    """
     if not API_KEY:
         return compact_error_response("环境变量 SERPER_API_KEY 未设置")
 
@@ -700,6 +711,17 @@ async def serper_general_search(
     search_language: Optional[str] = None,
     search_time: Optional[str] = None,
 ) -> str:
+    """
+    General Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+        search_time: Time Filter, Such As "hour", "day", "week", "month", "year" (Optional)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("search", query=search_key_words, search_num=search_num, country=search_country, language=search_language, search_time=search_time)
 
 
@@ -711,6 +733,17 @@ async def serper_image_search(
     search_language: Optional[str] = None,
     search_time: Optional[str] = None,
 ) -> str:
+    """
+    Image Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+        search_time: Time Filter, Such As "hour", "day", "week", "month", "year" (Optional)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("images", query=search_key_words, search_num=search_num, country=search_country, language=search_language, search_time=search_time)
 
 
@@ -722,6 +755,17 @@ async def serper_video_search(
     search_language: Optional[str] = None,
     search_time: Optional[str] = None,
 ) -> str:
+    """
+    Video Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+        search_time: Time Filter, Such As "hour", "day", "week", "month", "year" (Optional)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("videos", query=search_key_words, search_num=search_num, country=search_country, language=search_language, search_time=search_time)
 
 
@@ -733,6 +777,17 @@ async def serper_place_search(
     search_language: Optional[str] = None,
     location: Optional[str] = None,
 ) -> str:
+    """
+    Place Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+        location: Location Hint For Place Search (Optional)
+    Returns:
+        Json Format String
+    """
     extra = {"location": location} if location else None
     return await _search_tool("places", query=search_key_words, search_num=search_num, country=search_country, language=search_language, extra=extra)
 
@@ -747,6 +802,19 @@ async def serper_maps_search(
     search_country: Optional[str] = None,
     search_language: Optional[str] = None,
 ) -> str:
+    """
+    Maps Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        ll: Latitude/Longitude For Maps Query Mode (Optional)
+        placeId: Google Place ID (Optional)
+        cid: Google CID (Optional)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+    Returns:
+        Json Format String
+    """
     extra: Dict[str, Any] = {}
     if ll:
         extra["ll"] = ll
@@ -767,6 +835,19 @@ async def serper_reviews_search(
     search_country: Optional[str] = None,
     search_language: Optional[str] = None,
 ) -> str:
+    """
+    Reviews Search Interface
+    Parameters:
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        fid: Google FID, At Least One Of fid/cid/placeId Is Required (Optional)
+        cid: Google CID, At Least One Of fid/cid/placeId Is Required (Optional)
+        placeId: Google Place ID, At Least One Of fid/cid/placeId Is Required (Optional)
+        sortBy: Sort Option For Reviews (Optional)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+    Returns:
+        Json Format String
+    """
     if not any([fid, cid, placeId]):
         return compact_error_response("reviews 搜索至少需要 fid/cid/placeId 其中之一")
 
@@ -791,6 +872,17 @@ async def serper_news_search(
     search_language: Optional[str] = None,
     search_time: Optional[str] = None,
 ) -> str:
+    """
+    News Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+        search_time: Time Filter, Such As "hour", "day", "week", "month", "year" (Optional)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("news", query=search_key_words, search_num=search_num, country=search_country, language=search_language, search_time=search_time)
 
 
@@ -801,6 +893,16 @@ async def serper_lens_search(
     search_country: Optional[str] = None,
     search_language: Optional[str] = None,
 ) -> str:
+    """
+    Lens Search Interface
+    Parameters:
+        image_url: Public Image URL (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+    Returns:
+        Json Format String
+    """
     payload = _build_search_payload("lens", country=search_country, language=search_language)
     payload["url"] = image_url
     merged, err = await fetch_pages_and_merge("lens", payload, search_num)
@@ -816,6 +918,16 @@ async def serper_scholar_search(
     search_country: Optional[str] = None,
     search_language: Optional[str] = None,
 ) -> str:
+    """
+    Scholar Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("scholar", query=search_key_words, search_num=search_num, country=search_country, language=search_language)
 
 
@@ -826,6 +938,16 @@ async def serper_shopping_search(
     search_country: Optional[str] = None,
     search_language: Optional[str] = None,
 ) -> str:
+    """
+    Shopping Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+        search_country: Country Name (Optional)
+        search_language: Language Code, Such As "en" (Optional)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("shopping", query=search_key_words, search_num=search_num, country=search_country, language=search_language)
 
 
@@ -834,11 +956,27 @@ async def serper_patents_search(
     search_key_words: str,
     search_num: int = 10,
 ) -> str:
+    """
+    Patents Search Interface
+    Parameters:
+        search_key_words: Search Keywords (Required)
+        search_num: Number Of Results To Return, 1~100, Internally Normalized By Endpoint (Required)
+    Returns:
+        Json Format String
+    """
     return await _search_tool("patents", query=search_key_words, search_num=search_num)
 
 
 @mcp.tool(name="serper-scrape")
 async def serper_scrape(url: str, include_markdown: bool = False) -> str:
+    """
+    Scrape Interface
+    Parameters:
+        url: Target URL To Scrape (Required)
+        include_markdown: Include Markdown Content In Response (Optional)
+    Returns:
+        Json Format String
+    """
     if not API_KEY:
         return compact_error_response("环境变量 SERPER_API_KEY 未设置")
     if not url or not isinstance(url, str) or not url.strip():
