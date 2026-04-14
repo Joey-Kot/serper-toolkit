@@ -5,17 +5,30 @@ import math
 import os
 import random
 import re
+import sys
 import tempfile
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+def _env_enabled(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+if _env_enabled("SERPER_MCP_ENABLE_STDIO", False):
+    # In stdio transport, keep stderr/stdout clean for MCP protocol frames only.
+    logging.disable(logging.CRITICAL)
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+else:
+    logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 import httpx
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -1067,13 +1080,6 @@ def _release_process_lock(lock_handle, lock_path: str):
                 pass
     except Exception:
         pass
-
-
-def _env_enabled(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
 def main():
