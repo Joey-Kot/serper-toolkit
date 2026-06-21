@@ -154,7 +154,7 @@ done
 The CLI exposes the same 13 tool surfaces as subcommands:
 
 ```bash
-serper aggregated --query "AI news" --search-num 20 --country US --language en --search-time day
+serper aggregated --query "AI news" --search-num 20 --country US --language en --search-time day --timeout 120
 serper general --query "AI news" --search-num 10 --country US --language en --search-time week
 serper image --query "serper logo" --search-num 10
 serper video --query "web scraping tutorial" --search-num 10
@@ -184,6 +184,7 @@ Shared search parameters:
 - `--country` (optional): Country name or ISO code. Default is `US` where the Serper endpoint supports country targeting.
 - `--language` (optional): Language code, such as `en`.
 - `--search-time` (optional): One of `hour`, `day`, `week`, `month`, `year`. Supported by `aggregated`, `general`, `image`, `video`, and `news`.
+- `--timeout` (optional): Request timeout in seconds. Must be `> 0`. Default is `120`.
 
 Subcommand-specific parameters:
 
@@ -203,7 +204,7 @@ Normalization follows the Python toolkit:
 Scrape a page and save the markdown export as `example.md` in the current directory:
 
 ```bash
-serper scrape --output example --url "https://www.example.com"
+serper scrape --output example --url "https://www.example.com" --timeout 120
 ```
 
 Save the markdown export to a specific directory:
@@ -218,6 +219,7 @@ Scrape command parameters:
 - `--path` (optional): Directory where the markdown export is saved. Supports absolute and relative paths. Defaults to the current directory. If the directory does not exist, the CLI tries to create it before scraping.
 - `--url` (required): Target URL to scrape.
 - `--include-markdown` (optional): Request markdown content. Default is `true`.
+- `--timeout` (optional): Request timeout in seconds. Must be `> 0`. Default is `120`.
 
 Scrape output:
 

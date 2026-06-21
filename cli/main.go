@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	apiKeyEnv      = "SERPER_KEY"
-	defaultCountry = "US"
+	apiKeyEnv          = "SERPER_KEY"
+	defaultCountry     = "US"
+	defaultTimeoutSecs = 120
+	maxTimeoutSecs     = 9223372036
 )
 
 var endpoints = map[string]string{
@@ -101,6 +103,7 @@ type commandOptions struct {
 	CID        string
 	FID        string
 	SortBy     string
+	Timeout    int
 }
 
 var commandSpecs = map[string]commandSpec{
@@ -159,11 +162,13 @@ func runAggregated(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	var query, country, language, searchTime string
 	searchNum := 20
+	timeoutSecs := defaultTimeoutSecs
 	fs.StringVar(&query, "query", "", "Search keywords. Required.")
 	fs.IntVar(&searchNum, "search-num", 20, "Number of results to return. Optional. Range: 1-100. Default is 20.")
 	fs.StringVar(&country, "country", "", "Country name or ISO code. Optional. Default is US.")
 	fs.StringVar(&language, "language", "", "Language code, such as en. Optional.")
 	fs.StringVar(&searchTime, "search-time", "", `Time filter. Optional. One of: "hour", "day", "week", "month", "year".`)
+	fs.IntVar(&timeoutSecs, "timeout", defaultTimeoutSecs, "Request timeout in seconds. Optional. Must be > 0. Default is 120.")
 	fs.Usage = func() { printAggregatedUsage(stderr) }
 	if err := fs.Parse(args); err != nil {
 		return cliError{code: 2}
@@ -178,21 +183,24 @@ func runAggregated(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err := validateSearchNum(searchNum); err != nil {
 		return cliError{message: err.Error(), code: 2}
 	}
+	if err := validateTimeoutSecs(timeoutSecs); err != nil {
+		return cliError{message: err.Error(), code: 2}
+	}
 	if _, err := mapSearchTime(searchTime); err != nil {
 		return cliError{message: err.Error(), code: 2}
 	}
 
-	web, webMeta, err := fetchPagesAndMerge("search", buildSearchPayload("search", commandOptions{Query: query, Country: country, Language: language, SearchTime: searchTime}), searchNum)
+	web, webMeta, err := fetchPagesAndMerge("search", buildSearchPayload("search", commandOptions{Query: query, Country: country, Language: language, SearchTime: searchTime}), searchNum, timeoutSecs)
 	if err != nil {
 		fmt.Fprintln(stdout, compactError(err.Error(), err.StatusCode))
 		return cliError{code: 1}
 	}
-	news, newsMeta, err := fetchPagesAndMerge("news", buildSearchPayload("news", commandOptions{Query: query, Country: country, Language: language, SearchTime: searchTime}), searchNum)
+	news, newsMeta, err := fetchPagesAndMerge("news", buildSearchPayload("news", commandOptions{Query: query, Country: country, Language: language, SearchTime: searchTime}), searchNum, timeoutSecs)
 	if err != nil {
 		fmt.Fprintln(stdout, compactError(err.Error(), err.StatusCode))
 		return cliError{code: 1}
 	}
-	images, imageMeta, err := fetchPagesAndMerge("images", buildSearchPayload("images", commandOptions{Query: query, Country: country, Language: language, SearchTime: searchTime}), searchNum)
+	images, imageMeta, err := fetchPagesAndMerge("images", buildSearchPayload("images", commandOptions{Query: query, Country: country, Language: language, SearchTime: searchTime}), searchNum, timeoutSecs)
 	if err != nil {
 		fmt.Fprintln(stdout, compactError(err.Error(), err.StatusCode))
 		return cliError{code: 1}
@@ -219,7 +227,7 @@ func runAggregated(args []string, stdout io.Writer, stderr io.Writer) error {
 func runSearchCommand(spec commandSpec, args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet(spec.Name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	opts := commandOptions{SearchNum: spec.DefaultNum}
+	opts := commandOptions{SearchNum: spec.DefaultNum, Timeout: defaultTimeoutSecs}
 	if spec.QueryFlag {
 		fs.StringVar(&opts.Query, "query", "", "Search keywords. Required.")
 	}
@@ -227,6 +235,7 @@ func runSearchCommand(spec commandSpec, args []string, stdout io.Writer, stderr 
 		fs.StringVar(&opts.ImageURL, "image-url", "", "Public image URL. Required.")
 	}
 	fs.IntVar(&opts.SearchNum, "search-num", spec.DefaultNum, fmt.Sprintf("Number of results to return. Optional. Range: 1-100. Default is %d.", spec.DefaultNum))
+	fs.IntVar(&opts.Timeout, "timeout", defaultTimeoutSecs, "Request timeout in seconds. Optional. Must be > 0. Default is 120.")
 	if spec.CountryFlag {
 		fs.StringVar(&opts.Country, "country", "", "Country name or ISO code. Optional. Default is US.")
 	}
@@ -276,12 +285,15 @@ func runSearchCommand(spec commandSpec, args []string, stdout io.Writer, stderr 
 	if err := validateSearchNum(opts.SearchNum); err != nil {
 		return cliError{message: err.Error(), code: 2}
 	}
+	if err := validateTimeoutSecs(opts.Timeout); err != nil {
+		return cliError{message: err.Error(), code: 2}
+	}
 	if _, err := mapSearchTime(opts.SearchTime); err != nil {
 		return cliError{message: err.Error(), code: 2}
 	}
 
 	payload := buildSearchPayload(spec.Endpoint, opts)
-	merged, meta, upstreamErr := fetchPagesAndMerge(spec.Endpoint, payload, opts.SearchNum)
+	merged, meta, upstreamErr := fetchPagesAndMerge(spec.Endpoint, payload, opts.SearchNum, opts.Timeout)
 	if upstreamErr != nil {
 		fmt.Fprintln(stdout, compactError(upstreamErr.Error(), upstreamErr.StatusCode))
 		return cliError{code: 1}
@@ -295,10 +307,12 @@ func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	var output, outputDir, targetURL string
 	includeMarkdown := true
+	timeoutSecs := defaultTimeoutSecs
 	fs.StringVar(&output, "output", "", "Export name. Required. The result is saved as <output>.md.")
 	fs.StringVar(&outputDir, "path", ".", "Directory where the markdown export is saved. Optional. Default is the current directory.")
 	fs.StringVar(&targetURL, "url", "", "Target URL to scrape. Required.")
 	fs.BoolVar(&includeMarkdown, "include-markdown", true, "Request markdown content. Optional. Default is true.")
+	fs.IntVar(&timeoutSecs, "timeout", defaultTimeoutSecs, "Request timeout in seconds. Optional. Must be > 0. Default is 120.")
 	fs.Usage = func() { printScrapeUsage(stderr) }
 	if err := fs.Parse(args); err != nil {
 		return cliError{code: 2}
@@ -314,6 +328,9 @@ func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 	if fs.NArg() > 0 {
 		return cliError{message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(fs.Args(), " ")), code: 2}
 	}
+	if err := validateTimeoutSecs(timeoutSecs); err != nil {
+		return cliError{message: err.Error(), code: 2}
+	}
 	if err := ensureOutputDir(outputDir); err != nil {
 		fmt.Fprintln(stdout, "false")
 		fmt.Fprintln(stdout, err.Error())
@@ -324,7 +341,7 @@ func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 	if includeMarkdown {
 		payload["includeMarkdown"] = true
 	}
-	raw, err := serperPost("scrape", payload)
+	raw, err := serperPost("scrape", payload, timeoutSecs)
 	if err != nil {
 		fmt.Fprintln(stdout, "false")
 		fmt.Fprintln(stdout, err.Error())
@@ -381,7 +398,7 @@ func buildSearchPayload(endpoint string, opts commandOptions) map[string]any {
 	return payload
 }
 
-func fetchPagesAndMerge(endpoint string, basePayload map[string]any, requestedNum int) (map[string]any, map[string]any, *upstreamError) {
+func fetchPagesAndMerge(endpoint string, basePayload map[string]any, requestedNum int, timeoutSecs int) (map[string]any, map[string]any, *upstreamError) {
 	effectiveNum := normalizeSearchNumByEndpoint(endpoint, requestedNum)
 	pages := computePagesForTarget(endpoint, effectiveNum)
 	if endpoint == "maps" && pages > 1 && hasString(basePayload, "q") && !hasString(basePayload, "ll") {
@@ -393,7 +410,7 @@ func fetchPagesAndMerge(endpoint string, basePayload map[string]any, requestedNu
 		payload := copyMap(basePayload)
 		payload["num"] = effectiveNum
 		payload["page"] = 1
-		raw, err := serperPost(endpoint, payload)
+		raw, err := serperPost(endpoint, payload, timeoutSecs)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -402,7 +419,7 @@ func fetchPagesAndMerge(endpoint string, basePayload map[string]any, requestedNu
 		for page := 1; page <= pages; page++ {
 			payload := copyMap(basePayload)
 			payload["page"] = page
-			raw, err := serperPost(endpoint, payload)
+			raw, err := serperPost(endpoint, payload, timeoutSecs)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -430,7 +447,7 @@ func (e *upstreamError) Error() string {
 	return e.Message
 }
 
-func serperPost(endpointName string, payload map[string]any) (map[string]any, *upstreamError) {
+func serperPost(endpointName string, payload map[string]any, timeoutSecs int) (map[string]any, *upstreamError) {
 	key := strings.TrimSpace(os.Getenv(apiKeyEnv))
 	if key == "" {
 		return nil, &upstreamError{Message: apiKeyEnv + " is required"}
@@ -446,7 +463,8 @@ func serperPost(endpointName string, payload map[string]any) (map[string]any, *u
 	req.Header.Set("X-API-KEY", key)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "serper_cli/1.0")
-	resp, err := httpClient.Do(req)
+	client := clientWithTimeout(timeoutSecs)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, &upstreamError{Message: fmt.Sprintf("%s request error: %s", endpointName, err)}
 	}
@@ -471,6 +489,26 @@ func serperPost(endpointName string, payload map[string]any) (map[string]any, *u
 		return nil, &upstreamError{Message: stringValue(parsed["message"]), StatusCode: intValue(parsed["statusCode"])}
 	}
 	return parsed, nil
+}
+
+func validateTimeoutSecs(timeoutSecs int) error {
+	if timeoutSecs <= 0 {
+		return fmt.Errorf("--timeout must be an integer greater than 0")
+	}
+	if int64(timeoutSecs) > maxTimeoutSecs {
+		return fmt.Errorf("--timeout is too large")
+	}
+	return nil
+}
+
+func timeoutDuration(timeoutSecs int) time.Duration {
+	return time.Duration(timeoutSecs) * time.Second
+}
+
+func clientWithTimeout(timeoutSecs int) *http.Client {
+	client := *httpClient
+	client.Timeout = timeoutDuration(timeoutSecs)
+	return &client
 }
 
 func mergePageResults(endpoint string, pageResults []map[string]any, effectiveNum int) map[string]any {
@@ -988,19 +1026,19 @@ func stableUniqueStrings(items []string) []string {
 
 func printRootUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  serper aggregated --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>]
-  serper general    --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>]
-  serper image      --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>]
-  serper video      --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>]
-  serper place      --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--location <location>]
-  serper maps       --query <keywords> [--search-num <1-100>] [--ll <lat,lng>] [--place-id <id>] [--cid <cid>] [--country <country>] [--language <lang>]
-  serper reviews    [--search-num <1-100>] (--fid <fid> | --cid <cid> | --place-id <id>) [--sort-by <sort>] [--country <country>] [--language <lang>]
-  serper news       --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>]
-  serper lens       --image-url <url> [--search-num <1-100>] [--country <country>] [--language <lang>]
-  serper scholar    --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>]
-  serper shopping   --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>]
-  serper patents    --query <keywords> [--search-num <1-100>]
-  serper scrape     --output <name> [--path <path>] --url <url> [--include-markdown]
+  serper aggregated --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>] [--timeout <seconds>]
+  serper general    --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>] [--timeout <seconds>]
+  serper image      --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>] [--timeout <seconds>]
+  serper video      --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>] [--timeout <seconds>]
+  serper place      --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--location <location>] [--timeout <seconds>]
+  serper maps       --query <keywords> [--search-num <1-100>] [--ll <lat,lng>] [--place-id <id>] [--cid <cid>] [--country <country>] [--language <lang>] [--timeout <seconds>]
+  serper reviews    [--search-num <1-100>] (--fid <fid> | --cid <cid> | --place-id <id>) [--sort-by <sort>] [--country <country>] [--language <lang>] [--timeout <seconds>]
+  serper news       --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>] [--timeout <seconds>]
+  serper lens       --image-url <url> [--search-num <1-100>] [--country <country>] [--language <lang>] [--timeout <seconds>]
+  serper scholar    --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--timeout <seconds>]
+  serper shopping   --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--timeout <seconds>]
+  serper patents    --query <keywords> [--search-num <1-100>] [--timeout <seconds>]
+  serper scrape     --output <name> [--path <path>] --url <url> [--include-markdown] [--timeout <seconds>]
 
 The API key is read from SERPER_KEY.
 
@@ -1009,7 +1047,7 @@ The API key is read from SERPER_KEY.
 
 func printAggregatedUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  serper aggregated --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>]
+  serper aggregated --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>] [--search-time <hour|day|week|month|year>] [--timeout <seconds>]
 
 Parameters:
   --query        Search keywords. Required.
@@ -1017,6 +1055,7 @@ Parameters:
   --country      Country name or ISO code. Optional. Default is US.
   --language     Language code, such as en. Optional.
   --search-time  Time filter. Optional. One of: "hour", "day", "week", "month", "year".
+  --timeout      Request timeout in seconds. Optional. Must be > 0. Default is 120.
 
 Output:
   Compact single-line JSON with success, meta, data.web, data.news, data.images, and credits.
@@ -1060,6 +1099,7 @@ func printSearchUsage(w io.Writer, spec commandSpec) {
 	if spec.SortByFlag {
 		fmt.Fprint(w, " [--sort-by <sort>]")
 	}
+	fmt.Fprint(w, " [--timeout <seconds>]")
 	fmt.Fprint(w, "\n\nParameters:\n")
 	if spec.QueryFlag {
 		fmt.Fprint(w, "  --query       Search keywords. Required.\n")
@@ -1095,18 +1135,20 @@ func printSearchUsage(w io.Writer, spec commandSpec) {
 	if spec.SortByFlag {
 		fmt.Fprint(w, "  --sort-by     Review sort option. Optional.\n")
 	}
+	fmt.Fprint(w, "  --timeout     Request timeout in seconds. Optional. Must be > 0. Default is 120.\n")
 	fmt.Fprint(w, "\nOutput:\n  Compact single-line JSON with success, meta, data, and credits.\n\n")
 }
 
 func printScrapeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  serper scrape --output <name> [--path <path>] --url <url> [--include-markdown]
+  serper scrape --output <name> [--path <path>] --url <url> [--include-markdown] [--timeout <seconds>]
 
 Parameters:
   --output            Export name. Required. The result is saved as <output>.md.
   --path              Directory where the markdown export is saved. Optional. Default is the current directory.
   --url               Target URL to scrape. Required.
   --include-markdown  Request markdown content. Optional. Default is true.
+  --timeout           Request timeout in seconds. Optional. Must be > 0. Default is 120.
 
 Output:
   true on success. The markdown export is written only after a successful scrape.

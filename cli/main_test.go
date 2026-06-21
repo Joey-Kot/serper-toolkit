@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGeneralCommandOutputsCompactMappedJSON(t *testing.T) {
 	t.Setenv(apiKeyEnv, "test-key")
 	var calls []map[string]any
 	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		assertRequestTimeout(t, r, defaultTimeoutSecs)
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s", r.Method)
 		}
@@ -108,9 +110,18 @@ func TestReviewsValidation(t *testing.T) {
 	}
 }
 
+func TestTimeoutValidation(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"general", "--query", "ai", "--timeout", "0"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "--timeout") {
+		t.Fatalf("expected timeout validation error, got %v", err)
+	}
+}
+
 func TestScrapeCommandWritesMarkdownFileOnSuccess(t *testing.T) {
 	t.Setenv(apiKeyEnv, "test-key")
 	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		assertRequestTimeout(t, r, 7)
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
@@ -135,7 +146,7 @@ func TestScrapeCommandWritesMarkdownFileOnSuccess(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(oldWD) })
 
 	var stdout, stderr bytes.Buffer
-	err = run([]string{"scrape", "--output", "page", "--url", "https://example.com"}, &stdout, &stderr)
+	err = run([]string{"scrape", "--output", "page", "--url", "https://example.com", "--timeout", "7"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("run returned error: %v; stderr=%s", err, stderr.String())
 	}
@@ -317,5 +328,17 @@ func jsonResponse(status int, body string) *http.Response {
 		StatusCode: status,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func assertRequestTimeout(t *testing.T, r *http.Request, wantSeconds int) {
+	t.Helper()
+	deadline, ok := r.Context().Deadline()
+	if !ok {
+		t.Fatal("request context has no deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 || remaining > time.Duration(wantSeconds)*time.Second {
+		t.Fatalf("request timeout = %s, want <= %ds and > 0", remaining, wantSeconds)
 	}
 }
