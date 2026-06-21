@@ -293,9 +293,10 @@ func runSearchCommand(spec commandSpec, args []string, stdout io.Writer, stderr 
 func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("scrape", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var output, targetURL string
+	var output, outputDir, targetURL string
 	includeMarkdown := true
-	fs.StringVar(&output, "output", "", "Export name. Required. The result is saved as <output>.md in the current directory.")
+	fs.StringVar(&output, "output", "", "Export name. Required. The result is saved as <output>.md.")
+	fs.StringVar(&outputDir, "path", ".", "Directory where the markdown export is saved. Optional. Default is the current directory.")
 	fs.StringVar(&targetURL, "url", "", "Target URL to scrape. Required.")
 	fs.BoolVar(&includeMarkdown, "include-markdown", true, "Request markdown content. Optional. Default is true.")
 	fs.Usage = func() { printScrapeUsage(stderr) }
@@ -313,6 +314,11 @@ func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 	if fs.NArg() > 0 {
 		return cliError{message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(fs.Args(), " ")), code: 2}
 	}
+	if err := ensureOutputDir(outputDir); err != nil {
+		fmt.Fprintln(stdout, "false")
+		fmt.Fprintln(stdout, err.Error())
+		return cliError{code: 1}
+	}
 
 	payload := map[string]any{"url": targetURL}
 	if includeMarkdown {
@@ -325,7 +331,7 @@ func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 		return cliError{code: 1}
 	}
 	result := transformScrapeResult(raw, targetURL)
-	path := outputPath(output)
+	path := outputPath(output, outputDir)
 	if err := os.WriteFile(path, []byte(renderMarkdownFile(result)), 0o644); err != nil {
 		fmt.Fprintln(stdout, "false")
 		fmt.Fprintln(stdout, err.Error())
@@ -839,12 +845,24 @@ func supportsTime(endpoint string) bool {
 	}
 }
 
-func outputPath(output string) string {
+func ensureOutputDir(outputDir string) error {
+	dir := strings.TrimSpace(outputDir)
+	if dir == "" {
+		dir = "."
+	}
+	return os.MkdirAll(dir, 0o755)
+}
+
+func outputPath(output string, outputDir string) string {
 	name := filepath.Base(strings.TrimSpace(output))
 	if !strings.HasSuffix(strings.ToLower(name), ".md") {
 		name += ".md"
 	}
-	return filepath.Join(".", name)
+	dir := strings.TrimSpace(outputDir)
+	if dir == "" {
+		dir = "."
+	}
+	return filepath.Join(dir, name)
 }
 
 func loadCountryAliases() map[string]string {
@@ -982,7 +1000,7 @@ func printRootUsage(w io.Writer) {
   serper scholar    --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>]
   serper shopping   --query <keywords> [--search-num <1-100>] [--country <country>] [--language <lang>]
   serper patents    --query <keywords> [--search-num <1-100>]
-  serper scrape     --output <name> --url <url> [--include-markdown]
+  serper scrape     --output <name> [--path <path>] --url <url> [--include-markdown]
 
 The API key is read from SERPER_KEY.
 
@@ -1082,10 +1100,11 @@ func printSearchUsage(w io.Writer, spec commandSpec) {
 
 func printScrapeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  serper scrape --output <name> --url <url> [--include-markdown]
+  serper scrape --output <name> [--path <path>] --url <url> [--include-markdown]
 
 Parameters:
-  --output            Export name. Required. The result is saved as <output>.md in the current directory.
+  --output            Export name. Required. The result is saved as <output>.md.
+  --path              Directory where the markdown export is saved. Optional. Default is the current directory.
   --url               Target URL to scrape. Required.
   --include-markdown  Request markdown content. Optional. Default is true.
 

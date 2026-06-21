@@ -206,9 +206,16 @@ Scrape a page and save the markdown export as `example.md` in the current direct
 serper scrape --output example --url "https://www.example.com"
 ```
 
+Save the markdown export to a specific directory:
+
+```bash
+serper scrape --output example --path ./exports --url "https://www.example.com"
+```
+
 Scrape command parameters:
 
-- `--output` (required): Export name. The CLI writes `<output>.md` in the current directory.
+- `--output` (required): Export name. The CLI writes `<output>.md`.
+- `--path` (optional): Directory where the markdown export is saved. Supports absolute and relative paths. Defaults to the current directory. If the directory does not exist, the CLI tries to create it before scraping.
 - `--url` (required): Target URL to scrape.
 - `--include-markdown` (optional): Request markdown content. Default is `true`.
 

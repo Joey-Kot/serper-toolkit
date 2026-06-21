@@ -187,6 +187,65 @@ func TestScrapeCommandUsesInputURLWhenMetadataURLIsMissing(t *testing.T) {
 	}
 }
 
+func TestScrapeCommandCreatesOutputPathBeforeWritingFile(t *testing.T) {
+	t.Setenv(apiKeyEnv, "test-key")
+	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{"metadata":{"title":"T"},"markdown":"body","credits":1}`), nil
+	})
+	old := endpoints["scrape"]
+	endpoints["scrape"] = "https://example.test/scrape"
+	t.Cleanup(func() { endpoints["scrape"] = old })
+
+	dir := t.TempDir()
+	outputDir := filepath.Join(dir, "exports", "nested")
+
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"scrape", "--output", "page", "--path", outputDir, "--url", "https://example.com"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run returned error: %v; stderr=%s", err, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "true" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if _, err := os.Stat(outputDir); err != nil {
+		t.Fatalf("output path was not created: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(outputDir, "page.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "body") {
+		t.Fatalf("missing markdown body:\n%s", string(content))
+	}
+}
+
+func TestScrapeCommandFailsBeforeRequestWhenOutputPathCannotBeCreated(t *testing.T) {
+	t.Setenv(apiKeyEnv, "test-key")
+	requested := false
+	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{"markdown":"body"}`), nil
+	})
+
+	dir := t.TempDir()
+	notDir := filepath.Join(dir, "not-dir")
+	if err := os.WriteFile(notDir, []byte("file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"scrape", "--output", "page", "--path", notDir, "--url", "https://example.com"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected output path creation failure")
+	}
+	if requested {
+		t.Fatal("scrape request was made before output path was created")
+	}
+	if !strings.Contains(stdout.String(), "false") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
 func TestScrapeFailureDoesNotOverwriteExistingFile(t *testing.T) {
 	t.Setenv(apiKeyEnv, "test-key")
 	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
