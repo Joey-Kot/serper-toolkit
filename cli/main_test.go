@@ -118,7 +118,7 @@ func TestScrapeCommandWritesMarkdownFileOnSuccess(t *testing.T) {
 		if payload["includeMarkdown"] != true {
 			t.Fatalf("includeMarkdown = %#v", payload["includeMarkdown"])
 		}
-		return jsonResponse(200, `{"metadata":{"title":"T","description":"D"},"markdown":"hello%20world\\nnext","credits":3}`), nil
+		return jsonResponse(200, `{"metadata":{"title":"T","description":"D","og:url":"https://metadata.example/page"},"markdown":"hello%20world\\nnext","credits":3}`), nil
 	})
 	old := endpoints["scrape"]
 	endpoints["scrape"] = "https://example.test/scrape"
@@ -147,10 +147,43 @@ func TestScrapeCommandWritesMarkdownFileOnSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(content)
-	for _, want := range []string{"## title: T", "## description: D", "## credits: 3", "hello world\nnext"} {
+	for _, want := range []string{"## title: T", "## description: D", "## url: https://metadata.example/page", "## credits: 3", "hello world\nnext"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestScrapeCommandUsesInputURLWhenMetadataURLIsMissing(t *testing.T) {
+	t.Setenv(apiKeyEnv, "test-key")
+	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{"metadata":{"title":"T","description":"D"},"markdown":"body","credits":1}`), nil
+	})
+	old := endpoints["scrape"]
+	endpoints["scrape"] = "https://example.test/scrape"
+	t.Cleanup(func() { endpoints["scrape"] = old })
+
+	dir := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	var stdout, stderr bytes.Buffer
+	err = run([]string{"scrape", "--output", "page", "--url", "https://input.example/page"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run returned error: %v; stderr=%s", err, stderr.String())
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "page.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "## url: https://input.example/page") {
+		t.Fatalf("missing fallback url:\n%s", string(content))
 	}
 }
 

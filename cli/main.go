@@ -324,7 +324,7 @@ func runScrape(args []string, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintln(stdout, err.Error())
 		return cliError{code: 1}
 	}
-	result := transformScrapeResult(raw)
+	result := transformScrapeResult(raw, targetURL)
 	path := outputPath(output)
 	if err := os.WriteFile(path, []byte(renderMarkdownFile(result)), 0o644); err != nil {
 		fmt.Fprintln(stdout, "false")
@@ -567,7 +567,7 @@ func transformReviewsResult(raw map[string]any) map[string]any {
 	return map[string]any{"reviews": reviews}
 }
 
-func transformScrapeResult(raw map[string]any) map[string]any {
+func transformScrapeResult(raw map[string]any, fallbackURL string) map[string]any {
 	metadata, _ := raw["metadata"].(map[string]any)
 	markdown := stringValue(raw["markdown"])
 	if decoded, err := url.PathUnescape(markdown); err == nil {
@@ -577,6 +577,7 @@ func transformScrapeResult(raw map[string]any) map[string]any {
 	return map[string]any{
 		"title":       valueOrNil(metadata, "title"),
 		"description": firstNonEmpty(valueOrNil(metadata, "description"), valueOrNil(metadata, "og:description")),
+		"url":         firstNonEmpty(valueOrNil(metadata, "og:url"), fallbackURL),
 		"text":        raw["text"],
 		"markdown":    markdown,
 		"credits":     raw["credits"],
@@ -584,9 +585,10 @@ func transformScrapeResult(raw map[string]any) map[string]any {
 }
 
 func renderMarkdownFile(result map[string]any) string {
-	return fmt.Sprintf("## title: %s\n## description: %s\n## credits: %s\n\n---\n\n%s\n",
+	return fmt.Sprintf("## title: %s\n## description: %s\n## url: %s\n## credits: %s\n\n---\n\n%s\n",
 		stringValue(result["title"]),
 		stringValue(result["description"]),
+		stringValue(result["url"]),
 		stringValue(result["credits"]),
 		stringValue(result["markdown"]),
 	)

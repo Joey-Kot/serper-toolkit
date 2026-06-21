@@ -222,6 +222,7 @@ The generated markdown file uses this structure:
 ```markdown
 ## title:
 ## description:
+## url:
 ## credits:
 
 ---
