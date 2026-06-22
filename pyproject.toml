@@ -1,6 +1,6 @@
 [project]
 name = "serper-toolkit"
-version = "0.0.13"
+version = "0.0.14"
 description = "A high-performance, asynchronous MCP server for Serper Google Search, featuring connection pooling, request retries, and intelligent input parsing."
 readme = "README.md"
 license = "GPL-3.0-or-later"

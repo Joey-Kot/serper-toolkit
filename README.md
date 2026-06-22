@@ -75,6 +75,8 @@ A rebuilt Serper MCP server based on the `firecrawl-toolkit` architecture.
 
 ## MCP Client Example
 
+Use `uvx` to run the Python MCP server. `uvx` creates an isolated environment and installs package dependencies automatically:
+
 ```json
 {
   "mcpServers": {
