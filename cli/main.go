@@ -24,6 +24,7 @@ const (
 	defaultCountry     = "US"
 	defaultTimeoutSecs = 120
 	maxTimeoutSecs     = 9223372036
+	responsePreviewMax = 300
 )
 
 var endpoints = map[string]string{
@@ -474,13 +475,24 @@ func serperPost(endpointName string, payload map[string]any, timeoutSecs int) (m
 		return nil, &upstreamError{Message: readErr.Error()}
 	}
 	var parsed map[string]any
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		message := fmt.Sprintf("%s HTTP status error: %d", endpointName, resp.StatusCode)
+		if len(respBody) > 0 {
+			if err := json.Unmarshal(respBody, &parsed); err == nil {
+				if upstreamMessage := stringValue(parsed["message"]); upstreamMessage != "" {
+					message = fmt.Sprintf("%s: %s", message, upstreamMessage)
+				}
+			} else {
+				message = withResponseContext(message, resp, respBody)
+			}
+		}
+		return nil, &upstreamError{Message: message, StatusCode: resp.StatusCode}
+	}
 	if len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, &parsed); err != nil {
-			return nil, &upstreamError{Message: fmt.Sprintf("%s response JSON parse failed: %s", endpointName, err)}
+			message := fmt.Sprintf("%s response JSON parse failed: %s", endpointName, err)
+			return nil, &upstreamError{Message: withResponseContext(message, resp, respBody)}
 		}
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &upstreamError{Message: fmt.Sprintf("%s HTTP status error: %d", endpointName, resp.StatusCode), StatusCode: resp.StatusCode}
 	}
 	if parsed == nil {
 		return nil, &upstreamError{Message: endpointName + " response is empty"}
@@ -489,6 +501,27 @@ func serperPost(endpointName string, payload map[string]any, timeoutSecs int) (m
 		return nil, &upstreamError{Message: stringValue(parsed["message"]), StatusCode: intValue(parsed["statusCode"])}
 	}
 	return parsed, nil
+}
+
+func withResponseContext(message string, resp *http.Response, body []byte) string {
+	details := []string{fmt.Sprintf("status=%d", resp.StatusCode)}
+	if contentType := strings.TrimSpace(resp.Header.Get("Content-Type")); contentType != "" {
+		details = append(details, fmt.Sprintf("content-type=%q", contentType))
+	}
+	if preview := responseBodyPreview(body); preview != "" {
+		details = append(details, fmt.Sprintf("body=%q", preview))
+	}
+	return fmt.Sprintf("%s (%s)", message, strings.Join(details, ", "))
+}
+
+func responseBodyPreview(body []byte) string {
+	text := strings.ToValidUTF8(string(bytes.TrimSpace(body)), "?")
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) > responsePreviewMax {
+		return string(runes[:responsePreviewMax]) + "..."
+	}
+	return text
 }
 
 func validateTimeoutSecs(timeoutSecs int) error {

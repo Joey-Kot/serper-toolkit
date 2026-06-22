@@ -297,6 +297,50 @@ func TestScrapeFailureDoesNotOverwriteExistingFile(t *testing.T) {
 	}
 }
 
+func TestScrapeNonJSONSuccessReportsResponseContext(t *testing.T) {
+	t.Setenv(apiKeyEnv, "test-key")
+	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		return textResponse(200, "text/plain; charset=utf-8", "\u00e6 not json"), nil
+	})
+	old := endpoints["scrape"]
+	endpoints["scrape"] = "https://example.test/scrape"
+	t.Cleanup(func() { endpoints["scrape"] = old })
+
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"scrape", "--output", "page", "--url", "https://example.com"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected scrape failure")
+	}
+	out := stdout.String()
+	for _, want := range []string{"false", "scrape response JSON parse failed", "status=200", "text/plain", "\u00e6 not json"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestScrapeNonJSONHTTPErrorReportsStatusAndBody(t *testing.T) {
+	t.Setenv(apiKeyEnv, "test-key")
+	setMockHTTPClient(t, func(r *http.Request) (*http.Response, error) {
+		return textResponse(502, "text/html", "\u00e6 upstream gateway"), nil
+	})
+	old := endpoints["scrape"]
+	endpoints["scrape"] = "https://example.test/scrape"
+	t.Cleanup(func() { endpoints["scrape"] = old })
+
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"scrape", "--output", "page", "--url", "https://example.com"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected scrape failure")
+	}
+	out := stdout.String()
+	for _, want := range []string{"false", "scrape HTTP status error: 502", "text/html", "\u00e6 upstream gateway"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestCountryAliases(t *testing.T) {
 	cases := map[string]string{
 		"U.S.":           "US",
@@ -327,6 +371,14 @@ func jsonResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func textResponse(status int, contentType string, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{contentType}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }
